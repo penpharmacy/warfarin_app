@@ -34,5 +34,24 @@
     <div id="result"></div>
   </div>
   <script src="script.js"></script>
+<div class="mode-select">
+  <label><input type="radio" name="mode" value="manual" checked> ผู้ใช้เลือก % เปลี่ยนยาเอง</label>
+  <label><input type="radio" name="mode" value="auto"> ระบบแนะนำจากค่า INR</label>
+</div>
+
+<div id="percentSelect">
+  <label>เลือกเปอร์เซ็นต์การเปลี่ยนขนาดยา:
+    <select id="manualPercent">
+      <option value="0">0%</option>
+      <option value="0.05">+5%</option>
+      <option value="0.10">+10%</option>
+      <option value="0.20">+20%</option>
+      <option value="-0.05">-5%</option>
+      <option value="-0.10">-10%</option>
+      <option value="-0.20">-20%</option>
+    </select>
+  </label>
+</div>
+  
 </body>
 </html>
