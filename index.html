@@ -337,6 +337,8 @@ footer{font-size:13px;color:var(--muted);text-align:center;padding:8px}
                     <label class="pill"><input type="radio" name="pills" value="3" checked> ใช้เม็ด 3 mg เท่านั้น</label>
                     <label class="pill"><input type="radio" name="pills" value="2"> ใช้เม็ด 2 mg เท่านั้น</label>
                     <label class="pill"><input type="radio" name="pills" value="both"> ใช้ทั้ง 2 และ 3 mg</label>
+                    <label class="pill"><input type="radio" name="pills" value="3mg_fixed_1dayoff"> 3 mgไม่มีแบ่งครึ่ง แต่อาจมีวันหยุดได้</label>
+                    <label class="pill"><input type="radio" name="pills" value="2mg_fixed_1dayoff"> 2 mgไม่มีแบ่งครึ่ง แต่อาจมีวันหยุดได้</label>
                 </div>
             </div>
             <div style="margin-top:12px" class="row">
@@ -623,6 +625,37 @@ document.addEventListener('DOMContentLoaded', function() {
         for(let i=0;i<rem;i++) arr[i]++;
         return arr;
     }
+    
+    /**
+     * **ฟังก์ชันใหม่:** กระจายยา 7 วัน แบบเม็ดเต็ม (ห้ามแบ่งครึ่ง) และมีวันหยุดได้เพียง 1 วัน (0 mg)
+     * @param {number} totalPills - จำนวนเม็ดเต็มรวม 7 วันที่ต้องการให้
+     */
+    function distributeEvenly7Fixed(totalPills) {
+        if (totalPills === 0) return Array(7).fill(0);
+        
+        let daysToDose = 7;
+        let arr = [];
+
+        // เงื่อนไข: มีวันหยุดได้สูงสุด 1 วัน (ถ้าโดสต่ำกว่า 7 เม็ด)
+        if (totalPills < 7) {
+            daysToDose = 6; // จ่ายยาแค่ 6 วัน ที่เหลือเป็น 0 mg
+        }
+        
+        const basePills = Math.floor(totalPills / daysToDose);
+        arr = Array(daysToDose).fill(basePills);
+        let remainingPills = totalPills - basePills * daysToDose;
+        
+        for (let i = 0; i < remainingPills; i++) arr[i]++;
+
+        // ถ้าจ่ายแค่ 6 วัน ให้เพิ่ม 0 mg เข้าไป 1 วัน
+        if (daysToDose === 6) {
+            arr.push(0); 
+        }
+
+        // ต้องแน่ใจว่าค่าใน arr เป็น Integer (เม็ดเต็ม)
+        return arr.map(p => Math.round(p)); 
+    }
+    
     function findBestCombo(target){
         const numSets = Math.round(target / 5);
         const h3 = numSets;
@@ -651,36 +684,59 @@ document.addEventListener('DOMContentLoaded', function() {
         return html; 
     }
     function buildPlanHTML(title, combo, weeklyDose, displayMode, total3PillCount, total2PillCount, planIndex){
-        const perDay3 = distributeEvenly7(combo.h3);
-        const perDay2 = distributeEvenly7(combo.h2);
+        const pillChoice = document.querySelector('input[name="pills"]:checked').value; 
+        const isFixedDose = pillChoice === '3mg_fixed_1dayoff' || pillChoice === '2mg_fixed_1dayoff';
+
+        let perDay3 = [];
+        let perDay2 = [];
+
+        // ใช้ฟังก์ชันกระจายยาตามประเภทเม็ด
+        if (isFixedDose) {
+            if (pillChoice === '3mg_fixed_1dayoff') {
+                perDay3 = distributeEvenly7Fixed(combo.h3); // จำนวนเม็ด 3mg (เม็ดเต็ม)
+                perDay2 = Array(7).fill(0);
+            } else if (pillChoice === '2mg_fixed_1dayoff') {
+                perDay2 = distributeEvenly7Fixed(combo.h2); // จำนวนเม็ด 2mg (เม็ดเต็ม)
+                perDay3 = Array(7).fill(0);
+            }
+        } else {
+            // ตรรกะเดิม (รองรับครึ่งเม็ด)
+            perDay3 = distributeEvenly7(combo.h3);
+            perDay2 = distributeEvenly7(combo.h2);
+        }
+
         const totalWeekly = combo.total;
         const diffWeekPct = weeklyDose===0?0:((totalWeekly-weeklyDose)/weeklyDose)*100;
         const pctText = `${diffWeekPct>0?'+':''}${diffWeekPct.toFixed(2)}%`;
         const dayNames = ['จันทร์','อังคาร','พุธ','พฤหัส','ศุกร์','เสาร์','อาทิตย์'];
         const dayClasses = ['mon','tue','wed','thu','fri','sat','sun']; 
-        const pillChoice = document.querySelector('input[name="pills"]:checked').value; 
+        
         let html = `<div class="plan-section plan-${planIndex}">`;
         html += `<h4>ตัวเลือก: ${title} — รวม ${totalWeekly.toFixed(2)} mg/สัปดาห์ (${pctText} จากเดิม)</h4>`;
         if (displayMode === 'image') {
             html += `<div class="plan-grid">`;
             for(let i=0;i<7;i++){
-                let t3 = perDay3[i];
-                let t2 = perDay2[i];
-                if (combo.type === '3mg') { 
-                    t3 = t3 / 2;
-                    t2 = 0;
-                } else if (combo.type === '2mg') { 
-                    t2 = t2 / 2;
-                    t3 = 0;
+                let t3 = perDay3[i]; // เม็ด 3mg
+                let t2 = perDay2[i]; // เม็ด 2mg
+
+                if (!isFixedDose) {
+                    if (combo.type === '3mg') { 
+                        t3 = t3 / 2; // t3 เดิมเป็นจำนวนครึ่งเม็ด
+                        t2 = 0;
+                    } else if (combo.type === '2mg') { 
+                        t2 = t2 / 2; // t2 เดิมเป็นจำนวนครึ่งเม็ด
+                        t3 = 0;
+                    }
                 }
+                
                 const mg = t3*3 + t2*2;
                 const t3Html = generatePillImage(t3, 3);
                 const t2Html = generatePillImage(t2, 2);
                 const totalPillUnits = Math.ceil(t3) + Math.ceil(t2);
                 const shrinkClass = totalPillUnits >= 5 ? 'shrink-pills' : '';
                 let doseText = '';
-                if (t3 > 0) doseText += `3 mg x ${t3.toFixed(1).replace('.0','')}\n`;
-                if (t2 > 0) doseText += `2 mg x ${t2.toFixed(1).replace('.0','')}`;
+                if (t3 > 0) doseText += `3 mg x ${t3 % 1 === 0 ? t3 : t3.toFixed(1)}\n`;
+                if (t2 > 0) doseText += `2 mg x ${t2 % 1 === 0 ? t2 : t2.toFixed(1)}`;
                 html += `
                     <div class="day-card">
                         <div class="day-name ${dayClasses[i]}">${dayNames[i]}</div>
@@ -702,30 +758,47 @@ document.addEventListener('DOMContentLoaded', function() {
             html += `</div>`;
         } else {
             const pillTypes = [];
-            if (pillChoice === '3' || pillChoice === 'both') pillTypes.push({ label: '3 mg (เม็ด)', type: 3 });
-            if (pillChoice === '2' || pillChoice === 'both') pillTypes.push({ label: '2 mg (เม็ด)', type: 2 });
+            // เพิ่มเงื่อนไขสำหรับตัวเลือกใหม่
+            if (pillChoice === '3' || pillChoice === 'both' || pillChoice === '3mg_fixed_1dayoff') pillTypes.push({ label: '3 mg (เม็ด)', type: 3 });
+            if (pillChoice === '2' || pillChoice === 'both' || pillChoice === '2mg_fixed_1dayoff') pillTypes.push({ label: '2 mg (เม็ด)', type: 2 });
             pillTypes.push({ label: 'รวม (mg)', type: 'total' });
+            
             let headerCols = `<th>ชนิดยา</th>`;
             dayNames.forEach(day => { headerCols += `<th>${day}</th>`; });
             html += `<table class="plan-table plan-${planIndex}"><thead><tr>${headerCols}</tr></thead><tbody>`;
+            
             pillTypes.forEach(pillType => {
                 let dataRow = `<tr><td style="font-weight: 600;">${pillType.label}</td>`;
                 for(let i=0;i<7;i++){
                     let t3 = perDay3[i];
                     let t2 = perDay2[i];
-                    if (combo.type === '3mg') { 
-                        t3 = t3 / 2;
-                        t2 = 0;
-                    } else if (combo.type === '2mg') { 
-                        t2 = t2 / 2;
-                        t3 = 0;
+                    
+                    if (!isFixedDose) {
+                        if (combo.type === '3mg') { 
+                            t3 = t3 / 2; // t3 เดิมเป็นจำนวนครึ่งเม็ด
+                            t2 = 0;
+                        } else if (combo.type === '2mg') { 
+                            t2 = t2 / 2; // t2 เดิมเป็นจำนวนครึ่งเม็ด
+                            t3 = 0;
+                        }
                     }
+
                     const mg = t3*3 + t2*2;
                     let value = '';
                     if (pillType.type === 3) {
-                        value = t3 % 1 === 0 ? t3 : t3.toFixed(1);
+                        // FIX: สำหรับโหมดเม็ดเต็มห้ามแบ่งครึ่ง และขนาดยาเป็น 0 ให้แสดงคำว่า 'หยุด'
+                        if (isFixedDose && t3 === 0) {
+                            value = '<span style="color: var(--main-pink); font-weight: 700;">หยุด</span>';
+                        } else {
+                            value = t3 % 1 === 0 ? t3 : t3.toFixed(1);
+                        }
                     } else if (pillType.type === 2) {
-                        value = t2 % 1 === 0 ? t2 : t2.toFixed(1);
+                        // FIX: สำหรับโหมดเม็ดเต็มห้ามแบ่งครึ่ง และขนาดยาเป็น 0 ให้แสดงคำว่า 'หยุด'
+                        if (isFixedDose && t2 === 0) {
+                            value = '<span style="color: var(--main-pink); font-weight: 700;">หยุด</span>';
+                        } else {
+                            value = t2 % 1 === 0 ? t2 : t2.toFixed(1);
+                        }
                     } else if (pillType.type === 'total') {
                         value = mg.toFixed(2);
                     }
@@ -736,15 +809,15 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             html += `</tbody></table>`;
             let noteText = `สรุปจำนวนเม็ดยา (${document.getElementById('days').value} วันนัด)\n`;
-            if(total3PillCount > 0 && (pillChoice === '3' || pillChoice === 'both')) noteText += `รวม 3 mg: ${total3PillCount} เม็ด\n`;
-            if(total2PillCount > 0 && (pillChoice === '2' || pillChoice === 'both')) noteText += `รวม 2 mg: ${total2PillCount} เม็ด`;
+            if(total3PillCount > 0 && (pillChoice === '3' || pillChoice === 'both' || pillChoice === '3mg_fixed_1dayoff')) noteText += `รวม 3 mg: ${total3PillCount} เม็ด\n`;
+            if(total2PillCount > 0 && (pillChoice === '2' || pillChoice === 'both' || pillChoice === '2mg_fixed_1dayoff')) noteText += `รวม 2 mg: ${total2PillCount} เม็ด`;
             if(noteText.trim()) html += `<div class="note" style="white-space:pre-line">${noteText}</div>`;
         }
         html += `</div>`;
         return html;
     }
 
-    // **ฟังก์ชัน calculate() เดิม:**
+    // **ฟังก์ชัน calculate() ที่มีการแก้ไข:**
     function calculate(){
         const inrInput = document.getElementById('inr');
         const weeklyDoseInput = document.getElementById('weeklyDose');
@@ -795,13 +868,33 @@ document.addEventListener('DOMContentLoaded', function() {
            const min = weeklyDose*(1+adj.minPct);
            const max = weeklyDose*(1+adj.maxPct);
            const avg = weeklyDose*(1+adj.avgPct);
+           
+           let minRound, maxRound, avgRound;
+
+           if (pillChoice === '3mg_fixed_1dayoff') {
+               // โดสต้องเป็นผลคูณของ 3 (เม็ดเต็ม 3mg)
+               minRound = Math.round(min / 3) * 3;
+               maxRound = Math.round(max / 3) * 3;
+               avgRound = Math.round(avg / 3) * 3;
+           } else if (pillChoice === '2mg_fixed_1dayoff') {
+               // โดสต้องเป็นผลคูณของ 2 (เม็ดเต็ม 2mg)
+               minRound = Math.round(min / 2) * 2;
+               maxRound = Math.round(max / 2) * 2;
+               avgRound = Math.round(avg / 2) * 2;
+           } else {
+               // ตรรกะเดิม (รองรับครึ่งเม็ด)
+               minRound = roundHalf(min);
+               maxRound = roundHalf(max);
+               avgRound = roundHalf(avg);
+           }
+           
            newRange = {
              minCalc: parseFloat(min.toFixed(2)),
              maxCalc: parseFloat(max.toFixed(2)),
              avgCalc: parseFloat(avg.toFixed(2)),
-             min: roundHalf(min),
-             max: roundHalf(max),
-             avg: roundHalf(avg)
+             min: minRound,
+             max: maxRound,
+             avg: avgRound
            };
         }
         
@@ -823,7 +916,19 @@ document.addEventListener('DOMContentLoaded', function() {
             
            targets.forEach((t, index)=>{
             let best;
-            if(pillChoice==='3'){
+            let isFixedDose = false;
+            
+            if (pillChoice === '3mg_fixed_1dayoff') {
+                const numPills = Math.round(t.val / 3); 
+                best = { h3: numPills, h2: 0, total: numPills * 3, type: '3mg_fixed' };
+                isFixedDose = true;
+            } else if (pillChoice === '2mg_fixed_1dayoff') {
+                const numPills = Math.round(t.val / 2); 
+                best = { h3: 0, h2: numPills, total: numPills * 2, type: '2mg_fixed' };
+                isFixedDose = true;
+            }
+            // ตรรกะเดิม
+            else if(pillChoice==='3'){
               const h3=Math.round(t.val/1.5); 
               best={h3:h3,h2:0,total:h3*1.5,type:'3mg'}; 
             } else if(pillChoice==='2'){
@@ -835,18 +940,38 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             let total3 = 0, total2 = 0;
-            const perDay3 = distributeEvenly7(best.h3);
-            const perDay2 = distributeEvenly7(best.h2);
-              for(let i=0; i<numDays; i++){
-                  if(best.type==='3mg'){
-                      total3 += perDay3[i % 7]/2;
-                  } else if(best.type==='2mg'){
-                      total2 += perDay2[i % 7]/2;
-                  } else if(best.type==='5mg'){
-                      total3 += perDay3[i % 7];
-                      total2 += perDay2[i % 7];
-                  }
-              }
+            let perDay3 = [];
+            let perDay2 = [];
+            
+            // ใช้ฟังก์ชันกระจายยาตามประเภทเม็ด
+            if (isFixedDose) {
+                if (pillChoice === '3mg_fixed_1dayoff') {
+                    perDay3 = distributeEvenly7Fixed(best.h3); // จำนวนเม็ด 3mg
+                    perDay2 = Array(7).fill(0);
+                } else if (pillChoice === '2mg_fixed_1dayoff') {
+                    perDay2 = distributeEvenly7Fixed(best.h2); // จำนวนเม็ด 2mg
+                    perDay3 = Array(7).fill(0);
+                }
+            } else {
+                // โหมดเดิม (รองรับครึ่งเม็ด)
+                perDay3 = distributeEvenly7(best.h3);
+                perDay2 = distributeEvenly7(best.h2);
+            }
+
+            for(let i=0; i<numDays; i++){
+                if(isFixedDose) {
+                    // โหมดใหม่: ใช้จำนวนเม็ดเต็ม
+                    total3 += perDay3[i % 7];
+                    total2 += perDay2[i % 7];
+                } else if(best.type==='3mg'){
+                    total3 += perDay3[i % 7]/2; // perDay3 คือจำนวนครึ่งเม็ด
+                } else if(best.type==='2mg'){
+                    total2 += perDay2[i % 7]/2; // perDay2 คือจำนวนครึ่งเม็ด
+                } else if(best.type==='5mg'){
+                    total3 += perDay3[i % 7]; // perDay3 คือจำนวนเม็ดเต็ม 3mg
+                    total2 += perDay2[i % 7]; // perDay2 คือจำนวนเม็ดเต็ม 2mg
+                }
+            }
               
               total3 = Math.ceil(total3);
               total2 = Math.ceil(total2);
